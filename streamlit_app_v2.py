@@ -882,8 +882,8 @@ def main():
 
 if __name__ == "__main__":
     main()
-progress_bar = st.progress(0)
-                            status_text = st.empty()
+    progress_bar = st.progress(0)
+    status_text = st.empty()
                             
                             for i, (_, record) in enumerate(records.iterrows()):
                                 # Create text for embedding
