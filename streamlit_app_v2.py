@@ -885,43 +885,43 @@ if __name__ == "__main__":
     progress_bar = st.progress(0)
     status_text = st.empty()
                             
-                            for i, (_, record) in enumerate(records.iterrows()):
-                                # Create text for embedding
-                                charity_id = record["charity_id"]
-                                name = record["Name of Organisation"]
-                                charity_type = record["Type"]
-                                
-                                # Combine fields to create rich embedding text
-                                embedding_text = f"Charity: {name}. Type: {charity_type}."
-                                
-                                if pd.notna(record.get("Activities")) and record.get("Activities"):
-                                    embedding_text += f" Activities: {record.get('Activities')}"
-                                
-                                # Generate embedding
-                                try:
-                                    embedding = generate_embedding(
-                                        embedding_text, 
-                                        embedding_model, 
-                                        task_type="retrieval_document"
-                                    )
-                                    
-                                    if embedding:
-                                        # Update record with embedding
-                                        update_query = """
-                                        UPDATE testv2.charities 
-                                        SET embedding = %s 
-                                        WHERE "charity_id" = %s
-                                        """
-                                        execute_query(update_query, (embedding, charity_id), fetch=False)
-                                        
-                                        # Update progress
-                                        progress = (i + 1) / len(records)
-                                        progress_bar.progress(progress)
-                                        status_text.text(f"Processed {i+1}/{len(records)}: {name}")
-                                        
-                                        # Add delay to avoid rate limits
-                                        time.sleep(0.5)
-                                    
-                                except Exception as e:
-                                    st.error(f"Error generating embedding for {name}: {e}")
-                                    time.sleep(1)  # Longer delay on error
+        for i, (_, record) in enumerate(records.iterrows()):
+            # Create text for embedding
+            charity_id = record["charity_id"]
+            name = record["Name of Organisation"]
+            charity_type = record["Type"]
+            
+            # Combine fields to create rich embedding text
+            embedding_text = f"Charity: {name}. Type: {charity_type}."
+            
+            if pd.notna(record.get("Activities")) and record.get("Activities"):
+                embedding_text += f" Activities: {record.get('Activities')}"
+            
+            # Generate embedding
+            try:
+                embedding = generate_embedding(
+                    embedding_text, 
+                    embedding_model, 
+                    task_type="retrieval_document"
+                )
+                
+                if embedding:
+                    # Update record with embedding
+                    update_query = """
+                    UPDATE testv2.charities 
+                    SET embedding = %s 
+                    WHERE "charity_id" = %s
+                    """
+                    execute_query(update_query, (embedding, charity_id), fetch=False)
+                    
+                    # Update progress
+                    progress = (i + 1) / len(records)
+                    progress_bar.progress(progress)
+                    status_text.text(f"Processed {i+1}/{len(records)}: {name}")
+                    
+                    # Add delay to avoid rate limits
+                    time.sleep(0.5)
+                
+            except Exception as e:
+                st.error(f"Error generating embedding for {name}: {e}")
+                time.sleep(1)  # Longer delay on error
