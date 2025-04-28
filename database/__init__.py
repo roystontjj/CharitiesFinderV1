@@ -1,0 +1,1 @@
+"""Database package for Charity RAG Assistant."""
