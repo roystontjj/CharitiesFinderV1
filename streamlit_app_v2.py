@@ -106,8 +106,11 @@ def convert_to_paragraphs(batch_size: int = DEFAULT_BATCH_SIZE,
         elapsed_time = time.time() - start_time
         st.session_state.last_process_time = elapsed_time
         
-        return True, f"Successfully converted {len(df)} charity records to text", elapsed_time
-
+        return True, f"Successfully converted {len(df)} charity records to text", elapsed_time 
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        return False, f"Error during conversion: {str(e)}", elapsed_time
+    
 def save_converted_text(text: str, filename: str = None) -> tuple:
     """
     Save the converted text to a file.
