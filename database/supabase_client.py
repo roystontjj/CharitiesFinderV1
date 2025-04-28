@@ -20,16 +20,10 @@ class SupabaseClient:
         """
         self.client = create_client(url, key)
     
-    def fetch_all_charities(self) -> pd.DataFrame:
-        """
-        Fetch all charities from the database.
-        
-        Returns:
-            pd.DataFrame: DataFrame containing charity data
-        """
-        # Use the correct schema naming
-        response = self.client.table('charities').select('*').execute()
-        return pd.DataFrame(response.data)
+def fetch_all_charities(self) -> pd.DataFrame:
+    # Use the correct schema naming
+    response = self.client.table('charities').select('*').execute()
+    return pd.DataFrame(response.data)
     
     def fetch_charities_with_filter(self, column: str, value: Any) -> pd.DataFrame:
         """
