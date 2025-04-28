@@ -1,5 +1,6 @@
 """
 Text converter module to transform database tables to paragraph text for RAG.
+Fixed version with added debugging and error handling.
 """
 import pandas as pd
 from typing import List, Dict, Any, Optional
@@ -19,6 +20,7 @@ class TextConverter:
             str: Formatted paragraph text
         """
         # Extract fields with fallbacks to empty strings for missing data
+        # Check for alternative column naming formats
         name = row.get('Name of Organisation', '')
         org_type = row.get('Type', '')
         uen = row.get('UEN', '')
@@ -27,8 +29,12 @@ class TextConverter:
         classification = row.get('Classification', '')
         activities = row.get('Activities', '')
         
-        # Create a paragraph with the information
-        paragraph = f"{name} is a {org_type.lower() if org_type else 'charitable'} organization with UEN {uen}. "
+        # Handle case where organization name is missing
+        if not name:
+            # Rather than skipping, provide placeholder for unnamed organizations
+            paragraph = f"An unnamed {org_type.lower() if org_type else 'charitable'} organization with UEN {uen}. "
+        else:
+            paragraph = f"{name} is a {org_type.lower() if org_type else 'charitable'} organization with UEN {uen}. "
         
         if ipc_period:
             paragraph += f"It has an IPC period of {ipc_period}. "
@@ -57,10 +63,20 @@ class TextConverter:
         """
         paragraphs = []
         
+        # Check if DataFrame is empty
+        if df.empty:
+            return paragraphs
+            
         # Process each row in the DataFrame
-        for _, row in df.iterrows():
-            paragraph = TextConverter.charity_to_paragraph(row)
-            paragraphs.append(paragraph)
+        for idx, row in df.iterrows():
+            try:
+                paragraph = TextConverter.charity_to_paragraph(row)
+                paragraphs.append(paragraph)
+            except Exception as e:
+                # Instead of failing, log the error and continue
+                print(f"Error processing row {idx}: {e}")
+                # Add a placeholder paragraph so we maintain row count
+                paragraphs.append(f"Error processing charity record {idx}.")
             
         return paragraphs
     
@@ -76,7 +92,9 @@ class TextConverter:
         Returns:
             str: Concatenated text
         """
-        return separator.join(paragraphs)
+        # Filter out empty paragraphs before joining
+        valid_paragraphs = [p for p in paragraphs if p]
+        return separator.join(valid_paragraphs)
     
     @staticmethod
     def batch_process(df: pd.DataFrame, batch_size: int = 100) -> List[str]:
@@ -93,14 +111,20 @@ class TextConverter:
         results = []
         total_rows = len(df)
         
+        # Handle empty DataFrame
+        if total_rows == 0:
+            return ["No charity records found."]
+        
         for start_idx in range(0, total_rows, batch_size):
             end_idx = min(start_idx + batch_size, total_rows)
             batch_df = df.iloc[start_idx:end_idx]
             
             batch_paragraphs = TextConverter.charities_df_to_paragraphs(batch_df)
-            batch_text = TextConverter.concatenate_paragraphs(batch_paragraphs)
             
-            results.append(batch_text)
+            # Only add non-empty batch texts
+            if batch_paragraphs:
+                batch_text = TextConverter.concatenate_paragraphs(batch_paragraphs)
+                results.append(batch_text)
             
         return results
     
@@ -116,19 +140,25 @@ class TextConverter:
             str: Metadata header text
         """
         num_orgs = len(df)
-        sectors = df['Sector'].unique() if 'Sector' in df.columns else []
-        types = df['Type'].unique() if 'Type' in df.columns else []
+        
+        # Check if required columns exist
+        has_sector = 'Sector' in df.columns
+        has_type = 'Type' in df.columns
+        
+        # Get unique non-null values if columns exist
+        sectors = df['Sector'].dropna().unique() if has_sector else []
+        types = df['Type'].dropna().unique() if has_type else []
         
         header = f"CHARITY DATABASE OVERVIEW\n\n"
         header += f"This document contains information about {num_orgs} charitable organizations. "
         
         if len(sectors) > 0:
-            sector_list = [s for s in sectors if s and not pd.isna(s)]
+            sector_list = [str(s) for s in sectors if s]
             if sector_list:
                 header += f"These organizations span {len(sector_list)} sectors including: {', '.join(sector_list)}. "
             
         if len(types) > 0:
-            type_list = [t for t in types if t and not pd.isna(t)]
+            type_list = [str(t) for t in types if t]
             if type_list:
                 header += f"The database includes various organization types such as: {', '.join(type_list)}."
         
@@ -148,14 +178,25 @@ class TextConverter:
         Returns:
             str: Formatted text ready for RAG
         """
+        # Make a copy of the DataFrame to avoid modification warnings
+        df_copy = df.copy()
+        
+        # Replace NaN values with empty strings to prevent issues
+        for col in df_copy.columns:
+            df_copy[col] = df_copy[col].fillna('')
+        
         # Create header if requested
-        header = TextConverter.create_metadata_header(df) if include_metadata else ""
+        header = TextConverter.create_metadata_header(df_copy) if include_metadata else ""
         
         # Process the data in batches
-        batch_texts = TextConverter.batch_process(df, batch_size)
+        batch_texts = TextConverter.batch_process(df_copy, batch_size)
         
         # Combine all parts
-        if header:
+        if header and batch_texts:
             return header + "\n\n" + "\n\n".join(batch_texts)
-        else:
+        elif header:
+            return header
+        elif batch_texts:
             return "\n\n".join(batch_texts)
+        else:
+            return "No content could be generated from the provided data."
