@@ -27,8 +27,8 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing charity data
         """
-        # Use the specific schema and table name
-        response = self.client.table('testv2.charities').select('*').execute()
+        # Use the correct schema naming
+        response = self.client.table('charities').select('*').execute()
         return pd.DataFrame(response.data)
     
     def fetch_charities_with_filter(self, column: str, value: Any) -> pd.DataFrame:
@@ -42,7 +42,7 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing filtered charity data
         """
-        response = self.client.table('testv2.charities').select('*').eq(column, value).execute()
+        response = self.client.table('charities').select('*').eq(column, value).execute()
         return pd.DataFrame(response.data)
     
     def fetch_charities_with_limit(self, limit: int = 100) -> pd.DataFrame:
@@ -55,10 +55,10 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing charity data
         """
-        response = self.client.table('testv2.charities').select('*').limit(limit).execute()
+        response = self.client.table('charities').select('*').limit(limit).execute()
         return pd.DataFrame(response.data)
     
-    def fetch_table_columns(self, table_name: str = 'testv2.charities') -> List[str]:
+    def fetch_table_columns(self, table_name: str = 'charities') -> List[str]:
         """
         Get the column names from a table.
         
@@ -75,7 +75,7 @@ class SupabaseClient:
         return []
     
     def save_text_to_table(self, text: str, 
-                           table_name: str = 'testv2.rag_contexts', 
+                           table_name: str = 'rag_contexts', 
                            metadata: Optional[Dict[str, Any]] = None) -> bool:
         """
         Save generated paragraph text to a specified table for RAG.
@@ -92,7 +92,7 @@ class SupabaseClient:
             # Create data with required fields
             data = {
                 'content': text,
-                'source_table': 'testv2.charities',
+                'source_table': 'charities',
                 'is_active': True
             }
             
@@ -103,7 +103,9 @@ class SupabaseClient:
                 if 'record_count' in metadata:
                     data['record_count'] = metadata['record_count']
                 
-            response = self.client.table(table_name.replace('testv2.', '')).insert(data).execute()
+            # Remove schema prefix if present
+            clean_table_name = table_name.replace('testv2.', '')
+            response = self.client.table(clean_table_name).insert(data).execute()
             return len(response.data) > 0
         except Exception as e:
             print(f"Error saving text to table: {e}")
