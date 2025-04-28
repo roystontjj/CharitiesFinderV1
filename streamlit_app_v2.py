@@ -41,6 +41,7 @@ st.markdown("""
         margin-bottom: 1rem;
         max-height: 400px;
         overflow-y: auto;
+        color: #333;  /* Add this line to ensure text color is dark */
     }
     .info-box {
         background-color: #e1f5fe;
