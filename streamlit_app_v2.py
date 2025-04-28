@@ -79,21 +79,16 @@ def initialize_supabase():
 
 def convert_to_paragraphs(batch_size: int = DEFAULT_BATCH_SIZE, 
                          include_metadata: bool = INCLUDE_METADATA) -> tuple:
-    """
-    Convert charities table to paragraph text.
-    
-    Args:
-        batch_size: Number of records to process in each batch
-        include_metadata: Whether to include metadata header
-        
-    Returns:
-        tuple: (success, message, elapsed_time)
-    """
     start_time = time.time()
     
     try:
         # Fetch data from Supabase
         df = st.session_state.supabase_client.fetch_all_charities()
+        
+        # Debug: Display the first few rows and column names
+        st.write("Column names:", df.columns.tolist())
+        st.write("Sample data (first 2 rows):")
+        st.write(df.head(2))
         
         if df.empty:
             return False, "No data found in the charities table", 0
@@ -112,10 +107,6 @@ def convert_to_paragraphs(batch_size: int = DEFAULT_BATCH_SIZE,
         st.session_state.last_process_time = elapsed_time
         
         return True, f"Successfully converted {len(df)} charity records to text", elapsed_time
-    
-    except Exception as e:
-        elapsed_time = time.time() - start_time
-        return False, f"Error during conversion: {str(e)}", elapsed_time
 
 def save_converted_text(text: str, filename: str = None) -> tuple:
     """
