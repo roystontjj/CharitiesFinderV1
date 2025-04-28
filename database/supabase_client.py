@@ -20,10 +20,19 @@ class SupabaseClient:
         """
         self.client = create_client(url, key)
     
-def fetch_all_charities(self) -> pd.DataFrame:
-    # Use the correct schema naming
-    response = self.client.table('charities').select('*').execute()
-    return pd.DataFrame(response.data)
+    def fetch_all_charities(self, table_name: str = 'charities') -> pd.DataFrame:
+        """
+        Fetch all charities from the database.
+        
+        Returns:
+            pd.DataFrame: DataFrame containing charity data
+        """
+        # Clean the table name to remove schema prefixes
+        clean_table_name = table_name.split('.')[-1]
+        
+        # Use the correct schema naming
+        response = self.client.table(clean_table_name).select('*').execute()
+        return pd.DataFrame(response.data)
     
     def fetch_charities_with_filter(self, column: str, value: Any) -> pd.DataFrame:
         """
@@ -62,8 +71,11 @@ def fetch_all_charities(self) -> pd.DataFrame:
         Returns:
             list: List of column names
         """
+        # Clean the table name to remove schema prefixes
+        clean_table_name = table_name.split('.')[-1]
+        
         # Fetch a single row to get column names
-        response = self.client.table(table_name).select('*').limit(1).execute()
+        response = self.client.table(clean_table_name).select('*').limit(1).execute()
         if response.data:
             return list(response.data[0].keys())
         return []
@@ -98,7 +110,7 @@ def fetch_all_charities(self) -> pd.DataFrame:
                     data['record_count'] = metadata['record_count']
                 
             # Remove schema prefix if present
-            clean_table_name = table_name.replace('testv2.', '')
+            clean_table_name = table_name.split('.')[-1]  # More robust approach
             response = self.client.table(clean_table_name).insert(data).execute()
             return len(response.data) > 0
         except Exception as e:
