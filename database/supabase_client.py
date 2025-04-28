@@ -27,12 +27,22 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing charity data
         """
-        # Clean the table name to remove schema prefixes
-        clean_table_name = table_name.split('.')[-1]
-        
-        # Use the testv2 schema explicitly (based on your screenshot)
-        response = self.client.from_('testv2.charities').select('*').execute()
-        return pd.DataFrame(response.data)
+        try:
+            # Based on your screenshot, the schema is 'testv2' and table is 'charities'
+            # Instead of using from_, use table() with the correct schema format
+            response = self.client.table('testv2.charities').select('*').execute()
+            return pd.DataFrame(response.data)
+        except Exception as e:
+            print(f"Error fetching charities: {e}")
+            # Try an alternative approach if the first one fails
+            try:
+                response = self.client.from_('charities').select('*').execute()
+                return pd.DataFrame(response.data)
+            except Exception as e2:
+                print(f"Second attempt error: {e2}")
+                # Last resort - try without schema
+                response = self.client.table('charities').select('*').execute()
+                return pd.DataFrame(response.data)
     
     def fetch_charities_with_filter(self, column: str, value: Any) -> pd.DataFrame:
         """
