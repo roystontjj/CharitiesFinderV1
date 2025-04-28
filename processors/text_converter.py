@@ -31,11 +31,18 @@ class TextConverter:
         
         # Handle case where organization name is missing
         if not name:
-            # Rather than skipping, provide placeholder for unnamed organizations
-            paragraph = f"An unnamed {org_type.lower() if org_type else 'charitable'} organization with UEN {uen}. "
+            # Check if UEN exists and is not empty
+            if uen:
+                paragraph = f"An unnamed {org_type.lower() if org_type else 'charitable'} organization with UEN {uen}. "
+            else:
+                paragraph = f"An unnamed {org_type.lower() if org_type else 'charitable'} organization with no UEN specified. "
         else:
-            paragraph = f"{name} is a {org_type.lower() if org_type else 'charitable'} organization with UEN {uen}. "
-        
+            # Check if UEN exists and is not empty
+            if uen:
+                paragraph = f"{name} is a {org_type.lower() if org_type else 'charitable'} organization with UEN {uen}. "
+            else:
+                paragraph = f"{name} is a {org_type.lower() if org_type else 'charitable'} organization. "
+            
         if ipc_period:
             paragraph += f"It has an IPC period of {ipc_period}. "
             

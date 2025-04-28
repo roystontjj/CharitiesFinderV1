@@ -30,8 +30,8 @@ class SupabaseClient:
         # Clean the table name to remove schema prefixes
         clean_table_name = table_name.split('.')[-1]
         
-        # Use the correct schema naming
-        response = self.client.table(clean_table_name).select('*').execute()
+        # Use the testv2 schema explicitly (based on your screenshot)
+        response = self.client.from_('testv2.charities').select('*').execute()
         return pd.DataFrame(response.data)
     
     def fetch_charities_with_filter(self, column: str, value: Any) -> pd.DataFrame:
