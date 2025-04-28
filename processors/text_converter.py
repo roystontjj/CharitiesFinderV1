@@ -20,40 +20,30 @@ class TextConverter:
             str: Formatted paragraph text
         """
         # Extract fields with fallbacks to empty strings for missing data
-        # Check for alternative column naming formats
-        name = row.get('Name of Organisation', '')
-        org_type = row.get('Type', '')
-        uen = row.get('UEN', '')
-        ipc_period = row.get('IPC Period', '')
-        sector = row.get('Sector', '')
-        classification = row.get('Classification', '')
-        activities = row.get('Activities', '')
+        # Updated to match the actual column names in the database
+        name = row.get('name', '')
+        # Since we don't have these fields, either map them to other columns or leave as empty
+        org_type = row.get('charity_type', 'charitable')  # Default to 'charitable' if not found
+        uen = str(row.get('charity_id', ''))  # Using charity_id as a substitute for UEN
+        description = row.get('description', '')  # Using description field for activities
         
         # Handle case where organization name is missing
         if not name:
             # Check if UEN exists and is not empty
             if uen:
-                paragraph = f"An unnamed {org_type.lower() if org_type else 'charitable'} organization with UEN {uen}. "
+                paragraph = f"An unnamed {org_type.lower()} organization with ID {uen}. "
             else:
-                paragraph = f"An unnamed {org_type.lower() if org_type else 'charitable'} organization with no UEN specified. "
+                paragraph = f"An unnamed {org_type.lower()} organization with no ID specified. "
         else:
             # Check if UEN exists and is not empty
             if uen:
-                paragraph = f"{name} is a {org_type.lower() if org_type else 'charitable'} organization with UEN {uen}. "
+                paragraph = f"{name} is a {org_type.lower()} organization with ID {uen}. "
             else:
-                paragraph = f"{name} is a {org_type.lower() if org_type else 'charitable'} organization. "
-            
-        if ipc_period:
-            paragraph += f"It has an IPC period of {ipc_period}. "
-            
-        if sector:
-            paragraph += f"The organization operates in the {sector} sector. "
-            
-        if classification:
-            paragraph += f"It is classified as {classification}. "
-            
-        if activities:
-            paragraph += f"The organization is involved in the following activities: {activities}."
+                paragraph = f"{name} is a {org_type.lower()} organization. "
+        
+        # Add description if available
+        if description:
+            paragraph += f"Description: {description}"
         
         return paragraph.strip()
     
@@ -69,6 +59,9 @@ class TextConverter:
             List[str]: List of paragraph texts, one for each charity
         """
         paragraphs = []
+        
+        # Debug: Print column names to help with troubleshooting
+        print(f"Available columns in DataFrame: {df.columns.tolist()}")
         
         # Check if DataFrame is empty
         if df.empty:
@@ -148,26 +141,21 @@ class TextConverter:
         """
         num_orgs = len(df)
         
-        # Check if required columns exist
-        has_sector = 'Sector' in df.columns
-        has_type = 'Type' in df.columns
-        
-        # Get unique non-null values if columns exist
-        sectors = df['Sector'].dropna().unique() if has_sector else []
-        types = df['Type'].dropna().unique() if has_type else []
-        
+        # Adjusted to use available columns in the actual data
         header = f"CHARITY DATABASE OVERVIEW\n\n"
         header += f"This document contains information about {num_orgs} charitable organizations. "
         
-        if len(sectors) > 0:
-            sector_list = [str(s) for s in sectors if s]
-            if sector_list:
-                header += f"These organizations span {len(sector_list)} sectors including: {', '.join(sector_list)}. "
-            
-        if len(types) > 0:
-            type_list = [str(t) for t in types if t]
-            if type_list:
-                header += f"The database includes various organization types such as: {', '.join(type_list)}."
+        # Get unique names for a more meaningful summary if available
+        if 'name' in df.columns:
+            unique_names = df['name'].dropna().unique()
+            if len(unique_names) > 0:
+                sample_names = [str(n) for n in unique_names[:5] if n]  # Get up to 5 examples
+                if sample_names:
+                    header += f"Examples include: {', '.join(sample_names)}"
+                    if len(unique_names) > 5:
+                        header += ", and others."
+                    else:
+                        header += "."
         
         return header
     
@@ -185,6 +173,11 @@ class TextConverter:
         Returns:
             str: Formatted text ready for RAG
         """
+        # Debug: Print out the DataFrame info to understand its structure
+        print(f"DataFrame shape: {df.shape}")
+        print(f"DataFrame columns: {df.columns.tolist()}")
+        print(f"First row sample: {df.iloc[0].to_dict() if len(df) > 0 else 'No data'}")
+        
         # Make a copy of the DataFrame to avoid modification warnings
         df_copy = df.copy()
         
