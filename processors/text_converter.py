@@ -22,8 +22,10 @@ class TextConverter:
         # Check for various column naming patterns to handle different data formats
         # First, try the expected column names from charities_rows.csv
         name = row.get('Name of Organisation', row.get('name', ''))
-        org_type = row.get('Type', row.get('charity_type', 'charitable'))
-        uen = row.get('UEN', str(row.get('charity_id', '')))
+        # Correctly interpret the Type as charity status
+        charity_status = row.get('Type', row.get('charity_type', ''))
+        # Use actual UEN field, not the ID field
+        uen = row.get('UEN', row.get('uen', ''))
         ipc_period = row.get('IPC Period', '')
         sector = row.get('Sector', '')
         classification = row.get('Classification', '')
@@ -31,13 +33,24 @@ class TextConverter:
         
         # Start with the organization's basic identity
         if name:
-            paragraph = f"{name} is a {org_type.lower() if org_type else 'charitable'} organization "
+            # Explicitly mention the charity status
+            if charity_status:
+                paragraph = f"{name} is a {charity_status} "
+            else:
+                paragraph = f"{name} is a charitable organization "
+                
+            # Include UEN if available
             if uen:
                 paragraph += f"with the UEN identifier {uen}. "
             else:
                 paragraph += ". "
         else:
-            paragraph = f"An unnamed charitable organization "
+            # For unnamed organizations
+            if charity_status:
+                paragraph = f"An unnamed {charity_status} "
+            else:
+                paragraph = f"An unnamed charitable organization "
+                
             if uen:
                 paragraph += f"with UEN {uen}. "
             else:
@@ -189,7 +202,7 @@ class TextConverter:
             types = df['Type'].dropna().unique()
             type_list = [str(t) for t in types if t]
             if type_list:
-                header += f"The database includes various organization types such as: {', '.join(type_list[:5])}"
+                header += f"The database includes various charity statuses such as: {', '.join(type_list[:5])}"
                 if len(type_list) > 5:
                     header += ", and others. "
                 else:
