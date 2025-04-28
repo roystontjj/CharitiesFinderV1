@@ -1,7 +1,5 @@
 """
 Configuration settings for the application.
-
-This stores settings like database URL, API keys, and table names. It reads these from Streamlit secrets.
 """
 import streamlit as st
 
@@ -19,9 +17,9 @@ except Exception as e:
     SUPABASE_KEY = ""
     GEMINI_API_KEY = ""
 
-# Database table names
-CHARITIES_TABLE = "testv2.charities"
-RAG_CONTEXTS_TABLE = "testv2.rag_contexts"
+# Database table names - without schema prefixes
+CHARITIES_TABLE = "charities"  # Changed from testv2.charities
+RAG_CONTEXTS_TABLE = "rag_contexts"  # Changed from testv2.rag_contexts
 
 # App settings
 APP_TITLE = "Charity Data RAG Assistant"
