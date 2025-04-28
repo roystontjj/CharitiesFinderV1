@@ -4,7 +4,6 @@ Streamlit app for debugging charity data conversion
 import streamlit as st
 import pandas as pd
 import os
-from database.supabase_client import SupabaseClient
 from processors.text_converter import TextConverter
 
 def initialize_supabase():
