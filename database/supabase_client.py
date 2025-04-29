@@ -20,7 +20,7 @@ class SupabaseClient:
         """
         self.client = create_client(url, key)
     
-    def fetch_all_charities(self, table_name: str = 'charities') -> pd.DataFrame:
+    def fetch_all_charities(self, table_name: str = 'charities.gov') -> pd.DataFrame:
         """
         Fetch all charities from the database.
         
@@ -28,20 +28,20 @@ class SupabaseClient:
             pd.DataFrame: DataFrame containing charity data
         """
         try:
-            # Based on your screenshot, the schema is 'testv2' and table is 'charities'
+            # Based on your screenshot, the schema is 'testv2' and table is 'charities.gov'
             # Instead of using from_, use table() with the correct schema format
-            response = self.client.table('testv2.charities').select('*').execute()
+            response = self.client.table('testv2.charities.gov').select('*').execute()
             return pd.DataFrame(response.data)
         except Exception as e:
             print(f"Error fetching charities: {e}")
             # Try an alternative approach if the first one fails
             try:
-                response = self.client.from_('charities').select('*').execute()
+                response = self.client.from_('charities.gov').select('*').execute()
                 return pd.DataFrame(response.data)
             except Exception as e2:
                 print(f"Second attempt error: {e2}")
                 # Last resort - try without schema
-                response = self.client.table('charities').select('*').execute()
+                response = self.client.table('charities.gov').select('*').execute()
                 return pd.DataFrame(response.data)
     
     def fetch_charities_with_filter(self, column: str, value: Any) -> pd.DataFrame:
@@ -55,7 +55,7 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing filtered charity data
         """
-        response = self.client.table('charities').select('*').eq(column, value).execute()
+        response = self.client.table('charities.gov').select('*').eq(column, value).execute()
         return pd.DataFrame(response.data)
     
     def fetch_charities_with_limit(self, limit: int = 100) -> pd.DataFrame:
@@ -68,10 +68,10 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing charity data
         """
-        response = self.client.table('charities').select('*').limit(limit).execute()
+        response = self.client.table('charities.gov').select('*').limit(limit).execute()
         return pd.DataFrame(response.data)
     
-    def fetch_table_columns(self, table_name: str = 'charities') -> List[str]:
+    def fetch_table_columns(self, table_name: str = 'charities.gov') -> List[str]:
         """
         Get the column names from a table.
         
@@ -108,7 +108,7 @@ class SupabaseClient:
             # Create data with required fields
             data = {
                 'content': text,
-                'source_table': 'charities',
+                'source_table': 'charities.gov',
                 'is_active': True
             }
             

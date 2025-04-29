@@ -18,7 +18,7 @@ except Exception as e:
     GEMINI_API_KEY = ""
 
 # Database table names - without schema prefixes
-CHARITIES_TABLE = "charities"  # Changed from testv2.charities
+CHARITIES_TABLE = "charities.gov"  # Changed from charities
 RAG_CONTEXTS_TABLE = "rag_contexts"  # Changed from testv2.rag_contexts
 
 # App settings
