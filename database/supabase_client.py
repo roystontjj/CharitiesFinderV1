@@ -28,21 +28,36 @@ class SupabaseClient:
             pd.DataFrame: DataFrame containing charity data
         """
         try:
-            # Based on your screenshot, the schema is 'testv2' and table is 'charities.gov'
-            # Instead of using from_, use table() with the correct schema format
-            response = self.client.table('testv2.charities.gov').select('*').execute()
+            # Use the table name directly without splitting
+            response = self.client.table(table_name).select('*').execute()
             return pd.DataFrame(response.data)
         except Exception as e:
             print(f"Error fetching charities: {e}")
             # Try an alternative approach if the first one fails
             try:
-                response = self.client.from_('charities.gov').select('*').execute()
+                response = self.client.from_(table_name).select('*').execute()
                 return pd.DataFrame(response.data)
             except Exception as e2:
                 print(f"Second attempt error: {e2}")
                 # Last resort - try without schema
-                response = self.client.table('charities.gov').select('*').execute()
-                return pd.DataFrame(response.data)
+                try:
+                    # If the table has a schema prefix, we'll try without it
+                    if '.' in table_name:
+                        schema_parts = table_name.split('.')
+                        # If it's in format schema.table, get the last part
+                        if len(schema_parts) == 2:
+                            simple_name = schema_parts[1]
+                        else:
+                            # For cases like charities.gov where dot is part of the name
+                            simple_name = table_name
+                        
+                        response = self.client.table(simple_name).select('*').execute()
+                    else:
+                        response = self.client.table(table_name).select('*').execute()
+                    return pd.DataFrame(response.data)
+                except Exception as e3:
+                    print(f"All attempts failed: {e3}")
+                    return pd.DataFrame()
     
     def fetch_charities_with_filter(self, column: str, value: Any) -> pd.DataFrame:
         """
@@ -55,7 +70,9 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing filtered charity data
         """
-        response = self.client.table('charities.gov').select('*').eq(column, value).execute()
+        # Use the full table name without splitting
+        table_name = 'charities.gov'
+        response = self.client.table(table_name).select('*').eq(column, value).execute()
         return pd.DataFrame(response.data)
     
     def fetch_charities_with_limit(self, limit: int = 100) -> pd.DataFrame:
@@ -68,7 +85,9 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing charity data
         """
-        response = self.client.table('charities.gov').select('*').limit(limit).execute()
+        # Use the full table name without splitting
+        table_name = 'charities.gov'
+        response = self.client.table(table_name).select('*').limit(limit).execute()
         return pd.DataFrame(response.data)
     
     def fetch_table_columns(self, table_name: str = 'charities.gov') -> List[str]:
@@ -81,14 +100,24 @@ class SupabaseClient:
         Returns:
             list: List of column names
         """
-        # Clean the table name to remove schema prefixes
-        clean_table_name = table_name.split('.')[-1]
-        
-        # Fetch a single row to get column names
-        response = self.client.table(clean_table_name).select('*').limit(1).execute()
-        if response.data:
-            return list(response.data[0].keys())
-        return []
+        # Don't split the table name - use it as is
+        # This is critical for tables with a dot in their name
+        try:
+            response = self.client.table(table_name).select('*').limit(1).execute()
+            if response.data:
+                return list(response.data[0].keys())
+            return []
+        except Exception as e:
+            print(f"Error fetching columns: {e}")
+            # If the original approach fails, try a different method
+            try:
+                response = self.client.from_(table_name).select('*').limit(1).execute()
+                if response.data:
+                    return list(response.data[0].keys())
+                return []
+            except Exception as e2:
+                print(f"All column fetch attempts failed: {e2}")
+                return []
     
     def save_text_to_table(self, text: str, 
                            table_name: str = 'rag_contexts', 
@@ -118,10 +147,9 @@ class SupabaseClient:
                 # Also extract record count if available
                 if 'record_count' in metadata:
                     data['record_count'] = metadata['record_count']
-                
-            # Remove schema prefix if present
-            clean_table_name = table_name.split('.')[-1]  # More robust approach
-            response = self.client.table(clean_table_name).insert(data).execute()
+            
+            # Don't modify the table name - use it as is
+            response = self.client.table(table_name).insert(data).execute()
             return len(response.data) > 0
         except Exception as e:
             print(f"Error saving text to table: {e}")
