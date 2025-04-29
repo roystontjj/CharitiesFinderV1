@@ -19,36 +19,37 @@ class TextConverter:
         Returns:
             str: Formatted paragraph text optimized for vector search
         """
-        # Use exact column names from the CSV
-        name = row.get('Name of Organisation', '')
-        charity_status = row.get('Type', '')
-        uen = row.get('UEN', '')
-        ipc_period = row.get('IPC Period', '')
-        sector = row.get('Sector', '')
-        classification = row.get('Classification', '')
-        activities = row.get('Activities', '')
+        # Handle both exact column names and lowercase versions for flexibility
+        # Check for exact column names first
+        name = row.get('Name of Organisation', row.get('name of organisation', ''))
+        charity_status = row.get('Type', row.get('type', ''))
+        uen = row.get('UEN', row.get('uen', ''))
+        ipc_period = row.get('IPC Period', row.get('ipc period', ''))
+        sector = row.get('Sector', row.get('sector', ''))
+        classification = row.get('Classification', row.get('classification', ''))
+        activities = row.get('Activities', row.get('activities', ''))
         
         # Start with the organization's basic identity
-        if name:
+        if name and str(name).lower() != 'null' and str(name).strip() != '':
             # Explicitly mention the charity status
-            if charity_status:
+            if charity_status and str(charity_status).lower() != 'null' and str(charity_status).strip() != '':
                 paragraph = f"{name} is a {charity_status} "
             else:
                 paragraph = f"{name} is a charitable organization "
                 
             # Include UEN if available
-            if uen and uen.lower() != 'null':
+            if uen and str(uen).lower() != 'null' and str(uen).strip() != '':
                 paragraph += f"with the UEN identifier {uen}. "
             else:
                 paragraph += ". "
         else:
             # For unnamed organizations
-            if charity_status:
+            if charity_status and str(charity_status).lower() != 'null' and str(charity_status).strip() != '':
                 paragraph = f"An unnamed {charity_status} "
             else:
                 paragraph = f"An unnamed charitable organization "
                 
-            if uen and uen.lower() != 'null':
+            if uen and str(uen).lower() != 'null' and str(uen).strip() != '':
                 paragraph += f"with UEN {uen}. "
             else:
                 paragraph += "with no UEN specified. "
@@ -56,13 +57,13 @@ class TextConverter:
         # Add detailed information in a conversational flow
         details = []
         
-        if ipc_period and ipc_period.lower() != 'null':
+        if ipc_period and str(ipc_period).lower() != 'null' and str(ipc_period).strip() != '':
             details.append(f"It has been granted an IPC (Institution of Public Character) status for the period {ipc_period}")
         
-        if sector and sector.lower() != 'null':
+        if sector and str(sector).lower() != 'null' and str(sector).strip() != '':
             details.append(f"It operates within the {sector} sector")
         
-        if classification and classification.lower() != 'null':
+        if classification and str(classification).lower() != 'null' and str(classification).strip() != '':
             details.append(f"It is classified as {classification}")
         
         # Join details with appropriate conjunctions
@@ -70,9 +71,9 @@ class TextConverter:
             paragraph += " ".join(details) + ". "
         
         # Add activities as a concluding statement
-        if activities and activities.lower() != 'null':
+        if activities and str(activities).lower() != 'null' and str(activities).strip() != '':
             # Clean up activities text - remove any weird formatting
-            clean_activities = activities.replace("\n", " ").replace("\r", " ")
+            clean_activities = str(activities).replace("\n", " ").replace("\r", " ")
             while "  " in clean_activities:
                 clean_activities = clean_activities.replace("  ", " ")
                 
@@ -103,7 +104,9 @@ class TextConverter:
         # Process each row in the DataFrame
         for idx, row in df.iterrows():
             try:
-                paragraph = TextConverter.charity_to_paragraph(row)
+                # Convert row to dict first to ensure we have a consistent interface
+                row_dict = row.to_dict()
+                paragraph = TextConverter.charity_to_paragraph(row_dict)
                 paragraphs.append(paragraph)
             except Exception as e:
                 # Instead of failing, log the error and continue
@@ -178,14 +181,20 @@ class TextConverter:
         header = f"CHARITY DATABASE OVERVIEW\n\n"
         header += f"This document contains information about {num_orgs} charitable organizations. "
         
-        # Check for column existence using exact CSV column names
-        has_sector = 'Sector' in df.columns
-        has_type = 'Type' in df.columns
-        has_name = 'Name of Organisation' in df.columns
+        # Handle column name variations by checking both capitalized and lowercase versions
+        def check_column_exists(name):
+            return name in df.columns or name.lower() in df.columns
+        
+        def get_column_values(name):
+            if name in df.columns:
+                return df[name]
+            elif name.lower() in df.columns:
+                return df[name.lower()]
+            return pd.Series()
         
         # Get sector information if available
-        if has_sector:
-            sectors = df['Sector'].dropna().unique()
+        if check_column_exists('Sector'):
+            sectors = get_column_values('Sector').dropna().unique()
             sector_list = [str(s) for s in sectors if s and str(s).lower() != 'null']
             if sector_list:
                 header += f"These organizations span {len(sector_list)} sectors including: {', '.join(sector_list[:5])}"
@@ -195,8 +204,8 @@ class TextConverter:
                     header += ". "
         
         # Get organization type information if available
-        if has_type:
-            types = df['Type'].dropna().unique()
+        if check_column_exists('Type'):
+            types = get_column_values('Type').dropna().unique()
             type_list = [str(t) for t in types if t and str(t).lower() != 'null']
             if type_list:
                 header += f"The database includes various charity statuses such as: {', '.join(type_list[:5])}"
@@ -206,8 +215,8 @@ class TextConverter:
                     header += ". "
         
         # Get sample organization names
-        if has_name:
-            unique_names = df['Name of Organisation'].dropna().unique()
+        if check_column_exists('Name of Organisation'):
+            unique_names = get_column_values('Name of Organisation').dropna().unique()
             if len(unique_names) > 0:
                 sample_names = [str(n) for n in unique_names[:5] if n and str(n).lower() != 'null']
                 if sample_names:

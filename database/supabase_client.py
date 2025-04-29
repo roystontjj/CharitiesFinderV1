@@ -25,24 +25,53 @@ class SupabaseClient:
         """
         Fetch all charities from the database.
         
+        Args:
+            table_name: Name of the table to query
+            
         Returns:
             pd.DataFrame: DataFrame containing charity data
         """
         try:
-            # Simple approach with default public schema
-            response = self.client.table('charities').select('*').execute()
-            return pd.DataFrame(response.data)
+            # Try with the provided table name first
+            response = self.client.table(table_name).select('*').execute()
+            
+            # Check if response has data
+            if response.data:
+                print(f"Successfully fetched data from '{table_name}' with {len(response.data)} records")
+                return pd.DataFrame(response.data)
+            else:
+                print(f"Table '{table_name}' exists but contains no data")
+                
+            # If no data, try alternative tables
+            alternate_tables = ['charities_gov', 'public.charities', 'testv2.charities']
+            for alt_table in alternate_tables:
+                if alt_table == table_name:
+                    continue  # Skip if same as original
+                
+                try:
+                    print(f"Trying alternate table: {alt_table}")
+                    alt_response = self.client.table(alt_table).select('*').execute()
+                    if alt_response.data:
+                        print(f"Found data in '{alt_table}' with {len(alt_response.data)} records")
+                        return pd.DataFrame(alt_response.data)
+                except Exception as alt_e:
+                    print(f"Error with alternate table '{alt_table}': {alt_e}")
+            
+            # Return empty DataFrame if all attempts fail
+            return pd.DataFrame()
+            
         except Exception as e:
-            print(f"Error fetching charities: {e}")
+            print(f"Error fetching charities from '{table_name}': {e}")
             return pd.DataFrame()
     
-    def fetch_charities_with_filter(self, column: str, value: Any) -> pd.DataFrame:
+    def fetch_charities_with_filter(self, column: str, value: Any, table_name: str = 'charities') -> pd.DataFrame:
         """
         Fetch charities with a specific filter.
         
         Args:
             column: Column name to filter on
             value: Value to filter by
+            table_name: Name of the table to query
             
         Returns:
             pd.DataFrame: DataFrame containing filtered charity data
@@ -52,24 +81,25 @@ class SupabaseClient:
             if ' ' in column:
                 column = f'"{column}"'
                 
-            response = self.client.table('charities').select('*').eq(column, value).execute()
+            response = self.client.table(table_name).select('*').eq(column, value).execute()
             return pd.DataFrame(response.data)
         except Exception as e:
             print(f"Error with filtered query: {e}")
             return pd.DataFrame()
     
-    def fetch_charities_with_limit(self, limit: int = 100) -> pd.DataFrame:
+    def fetch_charities_with_limit(self, limit: int = 100, table_name: str = 'charities') -> pd.DataFrame:
         """
         Fetch charities with a row limit.
         
         Args:
             limit: Maximum number of rows to fetch
+            table_name: Name of the table to query
             
         Returns:
             pd.DataFrame: DataFrame containing charity data
         """
         try:
-            response = self.client.table('charities').select('*').limit(limit).execute()
+            response = self.client.table(table_name).select('*').limit(limit).execute()
             return pd.DataFrame(response.data)
         except Exception as e:
             print(f"Error with limited query: {e}")
@@ -101,8 +131,8 @@ class SupabaseClient:
                 response = self.client.rpc('execute_sql', {'query': query}).execute()
                 if response.data:
                     return [row['column_name'] for row in response.data]
-            except:
-                pass
+            except Exception as e:
+                print(f"RPC execute_sql error: {e}")
                 
             return []
         except Exception as e:

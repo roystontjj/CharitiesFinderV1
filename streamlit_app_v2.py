@@ -12,14 +12,68 @@ from typing import Dict, Any, List
 st.cache_data.clear()
 st.cache_resource.clear()
 
+# Create directories and init files if they don't exist
+os.makedirs('utils', exist_ok=True)
+os.makedirs('database', exist_ok=True)
+os.makedirs('processors', exist_ok=True)
+os.makedirs('outputs', exist_ok=True)
+
+# Make sure init files exist
+for directory in ['utils', 'database', 'processors']:
+    init_file = os.path.join(directory, '__init__.py')
+    if not os.path.exists(init_file):
+        with open(init_file, 'w') as f:
+            f.write('# Package initialization')
+
 # Import from project modules
-from config import (
-    SUPABASE_URL, SUPABASE_KEY, CHARITIES_TABLE, RAG_CONTEXTS_TABLE,
-    APP_TITLE, APP_SUBTITLE, DEFAULT_BATCH_SIZE, INCLUDE_METADATA
-)
-from database.supabase_client import SupabaseClient
-from processors.text_converter import TextConverter
-from utils.helpers import format_time, save_text_to_file, generate_filename
+try:
+    from config import (
+        SUPABASE_URL, SUPABASE_KEY, CHARITIES_TABLE, RAG_CONTEXTS_TABLE,
+        APP_TITLE, APP_SUBTITLE, DEFAULT_BATCH_SIZE, INCLUDE_METADATA
+    )
+except ImportError:
+    # Fallback defaults if config is missing
+    st.error("Config file not found. Using default values.")
+    SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+    CHARITIES_TABLE = "charities"
+    RAG_CONTEXTS_TABLE = "rag_contexts"
+    APP_TITLE = "Charity Data RAG Assistant"
+    APP_SUBTITLE = "Convert charity database to LLM-friendly paragraphs"
+    DEFAULT_BATCH_SIZE = 100
+    INCLUDE_METADATA = True
+
+try:
+    from database.supabase_client import SupabaseClient
+    from processors.text_converter import TextConverter
+    from utils.helpers import format_time, save_text_to_file, generate_filename
+except ImportError:
+    st.error("Required modules not found. Make sure all files are in the correct directories.")
+    
+    # Define fallback helper functions
+    def format_time(seconds):
+        if seconds < 1:
+            return f"{seconds*1000:.0f}ms"
+        elif seconds < 60:
+            return f"{seconds:.2f}s"
+        else:
+            minutes = int(seconds // 60)
+            remaining_seconds = seconds % 60
+            return f"{minutes}m {remaining_seconds:.0f}s"
+            
+    def generate_filename(prefix="charity_rag", extension="txt"):
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"{prefix}_{timestamp}.{extension}"
+        
+    def save_text_to_file(text, filename):
+        if not filename.endswith('.txt'):
+            filename += '.txt'
+        os.makedirs('outputs', exist_ok=True)
+        file_path = os.path.join('outputs', filename)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(text)
+        return file_path
 
 # Page configuration
 st.set_page_config(
@@ -61,6 +115,12 @@ st.markdown("""
         margin-bottom: 1rem;
         border: 1px solid #ffcc80;
     }
+    .stButton>button {
+        width: 100%;
+    }
+    .sidebar .stButton>button {
+        margin-bottom: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -77,6 +137,12 @@ if "last_process_time" not in st.session_state:
     st.session_state.last_process_time = None
 if "debug_mode" not in st.session_state:
     st.session_state.debug_mode = False
+if "table_name" not in st.session_state:
+    st.session_state.table_name = CHARITIES_TABLE
+if "show_diagnostics" not in st.session_state:
+    st.session_state.show_diagnostics = False
+if "csv_data" not in st.session_state:
+    st.session_state.csv_data = None
 
 def initialize_supabase():
     """Initialize Supabase client connection."""
@@ -98,12 +164,27 @@ def initialize_supabase():
         return False
 
 def convert_to_paragraphs(batch_size: int = DEFAULT_BATCH_SIZE, 
-                         include_metadata: bool = INCLUDE_METADATA) -> tuple:
+                         include_metadata: bool = INCLUDE_METADATA,
+                         table_name: str = None) -> tuple:
+    """
+    Convert charity data to paragraphs for RAG.
+    
+    Args:
+        batch_size: Size of each processing batch
+        include_metadata: Whether to include metadata in the output
+        table_name: Optional table name override
+        
+    Returns:
+        tuple: (success, message, elapsed_time)
+    """
     start_time = time.time()
+    
+    if table_name is None:
+        table_name = st.session_state.table_name
     
     try:
         # Fetch data from Supabase
-        df = st.session_state.supabase_client.fetch_all_charities()
+        df = st.session_state.supabase_client.fetch_all_charities(table_name=table_name)
         
         # Debug: Display the first few rows and column names
         if st.session_state.debug_mode:
@@ -111,9 +192,11 @@ def convert_to_paragraphs(batch_size: int = DEFAULT_BATCH_SIZE,
             if not df.empty:
                 st.write("Sample data (first 2 rows):")
                 st.write(df.head(2))
+            else:
+                st.warning(f"No data found in the '{table_name}' table")
         
         if df.empty:
-            return False, "No data found in the charities table", 0
+            return False, f"No data found in the '{table_name}' table. Please check your database or try another table name.", 0
         
         # Convert to paragraph text
         text = TextConverter.format_for_rag(
@@ -231,22 +314,25 @@ def run_database_diagnostics():
         st.error(f"❌ Error listing tables: {str(e)}")
     
     # Test 3: Check if charities table exists
-    st.write("#### 3. Testing access to charities table")
+    current_table = st.session_state.table_name
+    st.write(f"#### 3. Testing access to '{current_table}' table")
     try:
-        response = client.table(CHARITIES_TABLE).select('*').limit(1).execute()
+        response = client.table(current_table).select('*').limit(1).execute()
         if response.data:
-            st.success(f"✅ Successfully queried '{CHARITIES_TABLE}' table. Found data!")
+            st.success(f"✅ Successfully queried '{current_table}' table. Found data!")
             st.json(response.data[0])
         else:
-            st.warning(f"⚠️ '{CHARITIES_TABLE}' table exists but contains no data")
+            st.warning(f"⚠️ '{current_table}' table exists but contains no data")
     except Exception as e:
-        st.error(f"❌ Error accessing '{CHARITIES_TABLE}' table: {str(e)}")
+        st.error(f"❌ Error accessing '{current_table}' table: {str(e)}")
         
         # Try alternate table names
         alternate_tables = ['charities', 'charities_gov', 'testv2.charities', 'testv2.charities_gov', 'public.charities']
+        found_alt_table = False
+        
         for alt_table in alternate_tables:
             # Skip the current table name that we already tried
-            if alt_table == CHARITIES_TABLE:
+            if alt_table == current_table:
                 continue
                 
             st.write(f"Trying alternate table name: `{alt_table}`")
@@ -255,28 +341,58 @@ def run_database_diagnostics():
                 if response.data:
                     st.success(f"✅ Successfully queried '{alt_table}' table. Found data!")
                     st.json(response.data[0])
-                    st.info(f"💡 Update your CHARITIES_TABLE constant in config.py to '{alt_table}'")
+                    st.info(f"💡 Update your table name to '{alt_table}'")
+                    found_alt_table = True
+                    
+                    # Add a button to update the table name in session state
+                    if st.button(f"Use '{alt_table}' as table name"):
+                        st.session_state.table_name = alt_table
+                        st.success(f"Table name updated to '{alt_table}'")
+                        st.experimental_rerun()
+                    
                     break
                 else:
                     st.warning(f"⚠️ '{alt_table}' table exists but contains no data")
             except Exception as alt_e:
                 st.warning(f"⚠️ Could not access '{alt_table}': {str(alt_e)}")
+        
+        if not found_alt_table:
+            st.error("❌ No valid tables found. Please create a 'charities' table in your database.")
+            st.info("To create a new table, follow these steps:")
+            st.markdown("""
+            1. Go to the Supabase dashboard
+            2. Click on "Table Editor" in the left navigation
+            3. Click "New Table"
+            4. Name it "charities"
+            5. Add the following columns:
+               - id (type: int8, primary key)
+               - "S/N" (type: text)
+               - "Name of Organisation" (type: text)
+               - "Type" (type: text)
+               - "UEN" (type: text)
+               - "IPC Period" (type: text)
+               - "Sector" (type: text)
+               - "Classification" (type: text)
+               - "Activities" (type: text)
+            6. Click "Save" to create the table
+            """)
     
     # Test 4: Print configuration
     st.write("#### 4. Current Configuration")
     st.write(f"CHARITIES_TABLE = '{CHARITIES_TABLE}'")
+    st.write(f"Current table name = '{st.session_state.table_name}'")
     st.write(f"RAG_CONTEXTS_TABLE = '{RAG_CONTEXTS_TABLE}'")
     
     # Test 5: Check if data was imported
     st.write("#### 5. Check if CSV was imported")
     try:
         # Try to count rows in the charities table
-        response = client.table(CHARITIES_TABLE).select('*', count='exact').execute()
+        response = client.table(current_table).select('*', count='exact').execute()
         row_count = response.count if hasattr(response, 'count') else "unknown"
-        st.write(f"Rows in charities table: {row_count}")
+        st.write(f"Rows in '{current_table}' table: {row_count}")
         
         if row_count == 0 or row_count == "unknown":
-            st.warning("⚠️ No data found in the charities table. Did you import the CSV?")
+            st.warning(f"⚠️ No data found in the '{current_table}' table. Did you import the CSV?")
             st.info("To import your CSV data:")
             st.markdown("""
             1. Go to the Supabase dashboard
@@ -297,11 +413,65 @@ def run_database_diagnostics():
     except Exception as e:
         st.error(f"❌ Error checking row count: {str(e)}")
 
+def create_csv_upload_ui():
+    """Create UI for CSV upload as an alternative way to get data"""
+    st.subheader("CSV Upload (Alternative)")
+    
+    uploaded_file = st.file_uploader("Upload a CSV file if your database is empty", type="csv")
+    if uploaded_file is not None:
+        try:
+            # Read CSV
+            df = pd.read_csv(uploaded_file)
+            st.success(f"Successfully read CSV with {len(df)} rows and {len(df.columns)} columns")
+            
+            # Show columns
+            st.write("Column names:", df.columns.tolist())
+            
+            # Show sample data
+            st.write("Sample data (first 3 rows):")
+            st.dataframe(df.head(3))
+            
+            # Store in session state for later use
+            st.session_state.csv_data = df
+            
+            # Button to use this data
+            if st.button("Use this CSV data"):
+                if "converted_text" in st.session_state:
+                    # Clear previous result
+                    st.session_state.converted_text = None
+                
+                st.info("Processing CSV data...")
+                # Convert to paragraph text
+                text = TextConverter.format_for_rag(
+                    df, 
+                    include_metadata=st.session_state.get("include_metadata", INCLUDE_METADATA), 
+                    batch_size=st.session_state.get("batch_size", DEFAULT_BATCH_SIZE)
+                )
+                
+                # Store the result in session state
+                st.session_state.converted_text = text
+                st.success("CSV data processed successfully!")
+                st.experimental_rerun()
+        
+        except Exception as e:
+            st.error(f"Error processing CSV: {str(e)}")
+            st.session_state.csv_data = None
+
 # Main application UI
 def main():
     # Title and description
     st.title(APP_TITLE)
     st.subheader(APP_SUBTITLE)
+    
+    # Check for Supabase credentials
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        st.error("⚠️ Supabase credentials are missing. Please set them in your Streamlit secrets or environment variables.")
+        st.info("For local development, you can create a .streamlit/secrets.toml file with the following:")
+        st.code("""
+        SUPABASE_URL = "your-supabase-url"
+        SUPABASE_KEY = "your-supabase-key"
+        """)
+        return
     
     # Sidebar for controls
     with st.sidebar:
@@ -315,6 +485,13 @@ def main():
                     st.success("Connected to Supabase!")
                 else:
                     st.error("Failed to connect. See main panel for details.")
+        
+        # Table name input (editable)
+        if "table_name" in st.session_state:
+            custom_table = st.text_input("Table Name", value=st.session_state.table_name)
+            if custom_table != st.session_state.table_name:
+                st.session_state.table_name = custom_table
+                st.info(f"Table name updated to '{custom_table}'")
         
         # Debug mode toggle
         st.session_state.debug_mode = st.checkbox("Debug Mode", value=st.session_state.debug_mode)
@@ -342,6 +519,7 @@ def main():
         
         # Download
         if st.session_state.converted_text is not None:
+            st.subheader("Save Results")
             download_filename = st.text_input("Filename", value=generate_filename())
             if st.button("Save to File"):
                 success, message, path = save_converted_text(st.session_state.converted_text, download_filename)
@@ -355,7 +533,8 @@ def main():
         with st.spinner("Processing charity data..."):
             success, message, elapsed_time = convert_to_paragraphs(
                 batch_size=batch_size,
-                include_metadata=include_metadata
+                include_metadata=include_metadata,
+                table_name=st.session_state.table_name
             )
             st.session_state.processing = False
             
@@ -363,6 +542,8 @@ def main():
                 st.success(f"{message} in {format_time(elapsed_time)}")
             else:
                 st.error(message)
+                # Show the CSV upload option as a fallback
+                create_csv_upload_ui()
     
     # Show the result if available
     if st.session_state.converted_text is not None:
@@ -397,6 +578,14 @@ def main():
             if st.button("Hide Diagnostics"):
                 st.session_state.show_diagnostics = False
                 st.experimental_rerun()
+    
+    # If no client is initialized yet, show instructions
+    if st.session_state.supabase_client is None:
+        st.info("👈 Please start by initializing the database connection in the sidebar")
+        
+        # Add a section about uploading CSV directly
+        st.markdown("---")
+        create_csv_upload_ui()
 
 # Run the application
 if __name__ == "__main__":
