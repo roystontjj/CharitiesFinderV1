@@ -248,4 +248,49 @@ def run_database_diagnostics():
         for alt_table in alternate_tables:
             st.write(f"Trying alternate table name: `{alt_table}`")
             try:
-                response = client.table(alt_table).select('*').limit(
+                response = client.table(alt_table).select('*').limit(1).execute()
+                if response.data:
+                    st.success(f"✅ Successfully queried '{alt_table}' table. Found data!")
+                    st.json(response.data[0])
+                    st.info(f"💡 Update your CHARITIES_TABLE constant in config.py to '{alt_table}'")
+                    break
+                else:
+                    st.warning(f"⚠️ '{alt_table}' table exists but contains no data")
+            except Exception as alt_e:
+                st.warning(f"⚠️ Could not access '{alt_table}': {str(alt_e)}")
+    
+    # Test 4: Print configuration
+    st.write("#### 4. Current Configuration")
+    from config import CHARITIES_TABLE, RAG_CONTEXTS_TABLE
+    st.write(f"CHARITIES_TABLE = '{CHARITIES_TABLE}'")
+    st.write(f"RAG_CONTEXTS_TABLE = '{RAG_CONTEXTS_TABLE}'")
+    
+    # Test 5: Check if data was imported
+    st.write("#### 5. Check if CSV was imported")
+    try:
+        # Try to count rows in the charities table
+        response = client.table('charities').select('*', count='exact').execute()
+        row_count = response.count if hasattr(response, 'count') else "unknown"
+        st.write(f"Rows in charities table: {row_count}")
+        
+        if row_count == 0 or row_count == "unknown":
+            st.warning("⚠️ No data found in the charities table. Did you import the CSV?")
+            st.info("To import your CSV data:")
+            st.markdown("""
+            1. Go to the Supabase dashboard
+            2. Navigate to Table Editor
+            3. Select the "charities" table
+            4. Click "Import Data" and upload your CSV file
+            5. Map the columns correctly:
+               - id → id
+               - S/N → S/N
+               - Name of Organisation → Name of Organisation
+               - Type → Type
+               - UEN → UEN
+               - IPC Period → IPC Period
+               - Sector → Sector
+               - Classification → Classification
+               - Activities → Activities
+            """)
+    except Exception as e:
+        st.error(f"❌ Error checking row count: {str(e)}")
