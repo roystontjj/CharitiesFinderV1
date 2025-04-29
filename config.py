@@ -17,8 +17,9 @@ except Exception as e:
     SUPABASE_KEY = ""
     GEMINI_API_KEY = ""
 
-# Database table names - without schema prefixes
-CHARITIES_TABLE = "charities.gov"  # Changed from charities
+# Database table names - try both formats to increase chance of success
+# The actual access code has been modified to try multiple variants
+CHARITIES_TABLE = "charities_gov"  # Changed from charities to charities_gov (underscore instead of dot)
 RAG_CONTEXTS_TABLE = "rag_contexts"  # Changed from testv2.rag_contexts
 
 # App settings
