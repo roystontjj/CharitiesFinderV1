@@ -17,10 +17,10 @@ except Exception as e:
     SUPABASE_KEY = ""
     GEMINI_API_KEY = ""
 
-# Database table names - try both formats to increase chance of success
-# The actual access code has been modified to try multiple variants
-CHARITIES_TABLE = "charities_gov"  # Changed from charities to charities_gov (underscore instead of dot)
-RAG_CONTEXTS_TABLE = "rag_contexts"  # Changed from testv2.rag_contexts
+# Database table names - with schema prefixes
+# Note: The actual access is now handled directly in the SupabaseClient class
+CHARITIES_TABLE = "testv2.charities.gov"  # Updated with correct schema and table name
+RAG_CONTEXTS_TABLE = "testv2.rag_contexts"  # Using the same schema
 
 # App settings
 APP_TITLE = "Charity Data RAG Assistant"

@@ -19,55 +19,42 @@ class SupabaseClient:
             key: Supabase API key
         """
         self.client = create_client(url, key)
+        # Explicitly define the schema and table name
+        self.schema = "testv2"
+        self.table_name = "charities.gov"
+        self.full_table_name = f"{self.schema}.{self.table_name}"
     
-    def fetch_all_charities(self, table_name: str = 'charities_gov') -> pd.DataFrame:
+    def fetch_all_charities(self, table_name: str = None) -> pd.DataFrame:
         """
         Fetch all charities from the database.
         
         Returns:
             pd.DataFrame: DataFrame containing charity data
         """
-        # Try multiple table name formats
-        table_variations = [
-            'charities_gov',      # Using underscore instead of dot
-            'charities.gov',      # Using dot notation
-            '"charities.gov"',    # With quotes for special characters
-            'charities',          # Original table name
-            'public.charities_gov',  # With schema prefix
-            'public.charities.gov',  # With schema prefix and dot
-            'testv2.charities_gov',  # With testv2 schema
-            'testv2.charities.gov'   # With testv2 schema and dot
-        ]
-        
-        # Try each variation
-        for table_variant in table_variations:
-            try:
-                # Try using table method
-                response = self.client.table(table_variant).select('*').execute()
-                if response.data and len(response.data) > 0:
-                    return pd.DataFrame(response.data)
-            except Exception as e:
-                pass
-                
-            try:
-                # Try using from_ method
-                response = self.client.from_(table_variant.replace('"', '')).select('*').execute()
-                if response.data and len(response.data) > 0:
-                    return pd.DataFrame(response.data)
-            except Exception as e:
-                pass
-        
-        # If we get here, we couldn't find data in any table variation
-        # Try a final attempt with the original table
+        # Use the specific schema and table name
         try:
-            response = self.client.from_('charities').select('*').execute()
-            if response.data:
-                return pd.DataFrame(response.data)
+            # Using the table method with full schema.table name
+            print(f"Attempting to fetch from {self.full_table_name}")
+            response = self.client.table(self.full_table_name).select('*').execute()
+            return pd.DataFrame(response.data)
         except Exception as e:
-            pass
-            
-        # Return empty DataFrame if all attempts failed
-        return pd.DataFrame()
+            print(f"Error fetching from {self.full_table_name}: {e}")
+            try:
+                # Try an alternative approach using RPC for specific schema querying
+                print("Trying RPC method with schema qualification")
+                query = f'SELECT * FROM "{self.schema}"."{self.table_name}"'
+                response = self.client.rpc('execute_sql', {'query': query}).execute()
+                return pd.DataFrame(response.data) 
+            except Exception as e2:
+                print(f"RPC method failed: {e2}")
+                try:
+                    # Last attempt with from_ method
+                    print("Trying from_ method")
+                    response = self.client.from_(self.full_table_name).select('*').execute()
+                    return pd.DataFrame(response.data)
+                except Exception as e3:
+                    print(f"All methods failed: {e3}")
+                    return pd.DataFrame()
     
     def fetch_charities_with_filter(self, column: str, value: Any) -> pd.DataFrame:
         """
@@ -80,17 +67,12 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing filtered charity data
         """
-        # Try multiple table variations
-        for table_name in ['charities_gov', 'charities.gov', 'charities']:
-            try:
-                response = self.client.table(table_name).select('*').eq(column, value).execute()
-                if response.data and len(response.data) > 0:
-                    return pd.DataFrame(response.data)
-            except Exception:
-                pass
-        
-        # Return empty DataFrame if all attempts failed
-        return pd.DataFrame()
+        try:
+            response = self.client.table(self.full_table_name).select('*').eq(column, value).execute()
+            return pd.DataFrame(response.data)
+        except Exception as e:
+            print(f"Error fetching filtered data: {e}")
+            return pd.DataFrame()
     
     def fetch_charities_with_limit(self, limit: int = 100) -> pd.DataFrame:
         """
@@ -102,54 +84,32 @@ class SupabaseClient:
         Returns:
             pd.DataFrame: DataFrame containing charity data
         """
-        # Try multiple table variations
-        for table_name in ['charities_gov', 'charities.gov', 'charities']:
-            try:
-                response = self.client.table(table_name).select('*').limit(limit).execute()
-                if response.data and len(response.data) > 0:
-                    return pd.DataFrame(response.data)
-            except Exception:
-                pass
-        
-        # Return empty DataFrame if all attempts failed
-        return pd.DataFrame()
+        try:
+            response = self.client.table(self.full_table_name).select('*').limit(limit).execute()
+            return pd.DataFrame(response.data)
+        except Exception as e:
+            print(f"Error fetching limited data: {e}")
+            return pd.DataFrame()
     
-    def fetch_table_columns(self, table_name: str = 'charities_gov') -> List[str]:
+    def fetch_table_columns(self, table_name: str = None) -> List[str]:
         """
         Get the column names from a table.
         
         Args:
-            table_name: Name of the table
+            table_name: Name of the table (ignored, using class defaults)
             
         Returns:
             list: List of column names
         """
-        # Try different variations of the table name
-        table_variants = [
-            table_name,            # As provided
-            table_name.replace('.', '_'),  # Replace dots with underscores
-            'charities_gov',       # Hardcoded with underscore
-            'charities.gov',       # Hardcoded with dot
-            'charities'            # Original table name
-        ]
-        
-        for variant in table_variants:
-            try:
-                response = self.client.table(variant).select('*').limit(1).execute()
-                if response.data:
-                    return list(response.data[0].keys())
-            except Exception:
-                pass
-                
-            try:
-                response = self.client.from_(variant).select('*').limit(1).execute()
-                if response.data:
-                    return list(response.data[0].keys())
-            except Exception:
-                pass
-        
-        # If all attempts failed, return empty list
-        return []
+        try:
+            # Fetch a single row to get column names
+            response = self.client.table(self.full_table_name).select('*').limit(1).execute()
+            if response.data:
+                return list(response.data[0].keys())
+            return []
+        except Exception as e:
+            print(f"Error fetching columns: {e}")
+            return []
     
     def save_text_to_table(self, text: str, 
                            table_name: str = 'rag_contexts', 
@@ -166,17 +126,10 @@ class SupabaseClient:
             bool: True if successful, False otherwise
         """
         try:
-            # Find the source table that actually worked
-            source_table = 'charities_gov'
-            if self.fetch_all_charities('charities').shape[0] > 0:
-                source_table = 'charities'
-            elif self.fetch_all_charities('charities.gov').shape[0] > 0:
-                source_table = 'charities.gov'
-            
             # Create data with required fields
             data = {
                 'content': text,
-                'source_table': source_table,
+                'source_table': self.full_table_name,  # Use the qualified table name
                 'is_active': True
             }
             
@@ -187,16 +140,19 @@ class SupabaseClient:
                 if 'record_count' in metadata:
                     data['record_count'] = metadata['record_count']
             
-            # Try multiple variations for the target table too
-            for variant in [table_name, table_name.replace('.', '_')]:
-                try:
-                    response = self.client.table(variant).insert(data).execute()
-                    if response.data and len(response.data) > 0:
-                        return True
-                except Exception:
-                    pass
+            # Determine the target table with schema
+            target_table = f"{self.schema}.{table_name}" if '.' not in table_name else table_name
             
-            return False
+            try:
+                # Try with schema prefix first
+                response = self.client.table(target_table).insert(data).execute()
+                return len(response.data) > 0
+            except Exception as e:
+                print(f"Error with schema prefix: {e}")
+                # Try without schema prefix as fallback
+                response = self.client.table(table_name).insert(data).execute()
+                return len(response.data) > 0
+                
         except Exception as e:
             print(f"Error saving text to table: {e}")
             return False
