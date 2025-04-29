@@ -1,5 +1,6 @@
 """
 Supabase client module for database operations.
+Updated to handle exact column names from the CSV.
 """
 from supabase import create_client
 import pandas as pd
@@ -47,6 +48,10 @@ class SupabaseClient:
             pd.DataFrame: DataFrame containing filtered charity data
         """
         try:
+            # Note: For columns with spaces, we need to use double quotes
+            if ' ' in column:
+                column = f'"{column}"'
+                
             response = self.client.table('charities').select('*').eq(column, value).execute()
             return pd.DataFrame(response.data)
         except Exception as e:
@@ -84,6 +89,21 @@ class SupabaseClient:
             response = self.client.table(table_name).select('*').limit(1).execute()
             if response.data:
                 return list(response.data[0].keys())
+            
+            # If no data returned, use information schema to get columns
+            query = f"""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = '{table_name}'
+            """
+            try:
+                response = self.client.rpc('execute_sql', {'query': query}).execute()
+                if response.data:
+                    return [row['column_name'] for row in response.data]
+            except:
+                pass
+                
             return []
         except Exception as e:
             print(f"Error fetching columns: {e}")
