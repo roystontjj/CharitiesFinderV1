@@ -106,13 +106,12 @@ def convert_to_paragraphs(batch_size: int = DEFAULT_BATCH_SIZE,
         df = st.session_state.supabase_client.fetch_all_charities()
         
         # Debug: Display the first few rows and column names
-        st.write("Column names:", df.columns.tolist())
-        if not df.empty:
-            st.write("Sample data (first 2 rows):")
-            st.write(df.head(2))
-        else:
-            st.warning("No data found in the database. Please check your table and import your CSV data.")
-            
+        if st.session_state.debug_mode:
+            st.write("Column names:", df.columns.tolist())
+            if not df.empty:
+                st.write("Sample data (first 2 rows):")
+                st.write(df.head(2))
+        
         if df.empty:
             return False, "No data found in the charities table", 0
         
@@ -234,18 +233,22 @@ def run_database_diagnostics():
     # Test 3: Check if charities table exists
     st.write("#### 3. Testing access to charities table")
     try:
-        response = client.table('charities').select('*').limit(1).execute()
+        response = client.table(CHARITIES_TABLE).select('*').limit(1).execute()
         if response.data:
-            st.success(f"✅ Successfully queried charities table. Found data!")
+            st.success(f"✅ Successfully queried '{CHARITIES_TABLE}' table. Found data!")
             st.json(response.data[0])
         else:
-            st.warning("⚠️ 'charities' table exists but contains no data")
+            st.warning(f"⚠️ '{CHARITIES_TABLE}' table exists but contains no data")
     except Exception as e:
-        st.error(f"❌ Error accessing 'charities' table: {str(e)}")
+        st.error(f"❌ Error accessing '{CHARITIES_TABLE}' table: {str(e)}")
         
         # Try alternate table names
-        alternate_tables = ['charities_gov', 'testv2.charities', 'testv2.charities_gov', 'public.charities']
+        alternate_tables = ['charities', 'charities_gov', 'testv2.charities', 'testv2.charities_gov', 'public.charities']
         for alt_table in alternate_tables:
+            # Skip the current table name that we already tried
+            if alt_table == CHARITIES_TABLE:
+                continue
+                
             st.write(f"Trying alternate table name: `{alt_table}`")
             try:
                 response = client.table(alt_table).select('*').limit(1).execute()
@@ -261,7 +264,6 @@ def run_database_diagnostics():
     
     # Test 4: Print configuration
     st.write("#### 4. Current Configuration")
-    from config import CHARITIES_TABLE, RAG_CONTEXTS_TABLE
     st.write(f"CHARITIES_TABLE = '{CHARITIES_TABLE}'")
     st.write(f"RAG_CONTEXTS_TABLE = '{RAG_CONTEXTS_TABLE}'")
     
@@ -269,7 +271,7 @@ def run_database_diagnostics():
     st.write("#### 5. Check if CSV was imported")
     try:
         # Try to count rows in the charities table
-        response = client.table('charities').select('*', count='exact').execute()
+        response = client.table(CHARITIES_TABLE).select('*', count='exact').execute()
         row_count = response.count if hasattr(response, 'count') else "unknown"
         st.write(f"Rows in charities table: {row_count}")
         
@@ -294,3 +296,108 @@ def run_database_diagnostics():
             """)
     except Exception as e:
         st.error(f"❌ Error checking row count: {str(e)}")
+
+# Main application UI
+def main():
+    # Title and description
+    st.title(APP_TITLE)
+    st.subheader(APP_SUBTITLE)
+    
+    # Sidebar for controls
+    with st.sidebar:
+        st.header("Controls")
+        
+        # Connection status
+        st.subheader("Database Connection")
+        if st.button("Initialize Database Connection"):
+            with st.spinner("Connecting to Supabase..."):
+                if initialize_supabase():
+                    st.success("Connected to Supabase!")
+                else:
+                    st.error("Failed to connect. See main panel for details.")
+        
+        # Debug mode toggle
+        st.session_state.debug_mode = st.checkbox("Debug Mode", value=st.session_state.debug_mode)
+        
+        # Diagnostics tool
+        st.subheader("Diagnostics")
+        if st.button("Run Database Diagnostics"):
+            if st.session_state.supabase_client is None:
+                st.error("Please initialize the database connection first")
+            else:
+                st.session_state.show_diagnostics = True
+                
+        # Settings
+        st.subheader("Settings")
+        batch_size = st.number_input("Batch Size", min_value=1, max_value=1000, value=DEFAULT_BATCH_SIZE)
+        include_metadata = st.checkbox("Include Metadata", value=INCLUDE_METADATA)
+        
+        # Process action
+        st.subheader("Actions")
+        if st.button("Convert to RAG Format"):
+            if st.session_state.supabase_client is None:
+                st.error("Please initialize the database connection first")
+            else:
+                st.session_state.processing = True
+        
+        # Download
+        if st.session_state.converted_text is not None:
+            download_filename = st.text_input("Filename", value=generate_filename())
+            if st.button("Save to File"):
+                success, message, path = save_converted_text(st.session_state.converted_text, download_filename)
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+    
+    # Main panel
+    if st.session_state.processing:
+        with st.spinner("Processing charity data..."):
+            success, message, elapsed_time = convert_to_paragraphs(
+                batch_size=batch_size,
+                include_metadata=include_metadata
+            )
+            st.session_state.processing = False
+            
+            if success:
+                st.success(f"{message} in {format_time(elapsed_time)}")
+            else:
+                st.error(message)
+    
+    # Show the result if available
+    if st.session_state.converted_text is not None:
+        st.subheader("Generated RAG Context Text")
+        
+        # Show stats
+        text_len = len(st.session_state.converted_text)
+        num_paragraphs = st.session_state.converted_text.count('\n\n') + 1
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Text Length", f"{text_len:,} chars")
+        with col2:
+            st.metric("Paragraphs", f"{num_paragraphs:,}")
+        with col3:
+            if st.session_state.last_process_time:
+                st.metric("Process Time", format_time(st.session_state.last_process_time))
+        
+        # Show preview
+        with st.expander("Preview Text", expanded=False):
+            preview_length = min(10000, len(st.session_state.converted_text))
+            st.markdown(f"```\n{st.session_state.converted_text[:preview_length]}\n```")
+            if preview_length < len(st.session_state.converted_text):
+                st.info(f"Showing first {preview_length:,} of {len(st.session_state.converted_text):,} characters.")
+    
+    # Show diagnostics if requested
+    if st.session_state.get("show_diagnostics", False):
+        with st.container():
+            st.markdown("<div class='diagnostic-box'>", unsafe_allow_html=True)
+            run_database_diagnostics()
+            st.markdown("</div>", unsafe_allow_html=True)
+            if st.button("Hide Diagnostics"):
+                st.session_state.show_diagnostics = False
+                st.experimental_rerun()
+
+# Run the application
+if __name__ == "__main__":
+    main()
